@@ -58,7 +58,7 @@
   function feedText() {
     const f = window.FTLTFeed.info();
     const t = f.lastCheck ? f.lastCheck.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET' : '';
-    if (f.ok) return `<span class="feed ok" title="The page checks the live feed every minute and updates in place. The feed refreshes about every 10 minutes in market hours.">Live feed · checked ${t}</span>`;
+    if (f.ok) return `<span class="feed ok" title="The page checks the live feed every minute and updates in place. The feed updates at 3:00 PM ET (2:00 PM CT) and again after the close on weekdays.">Live feed · checked ${t}</span>`;
     return `<span class="feed off" title="${esc(f.err || '')}">Feed unreachable${f.dataSrc === 'bundled' ? ' · showing bundled snapshot' : ''}${t ? ' · retried ' + t : ''}</span>`;
   }
 
@@ -245,7 +245,7 @@
         <li>A display-only port of the Pine v6 script. Strategy logic is unchanged; the Python engine reproduces SMA200/SMA20, Wilder RSI10 and UVXY RSI14, the RSI80/RSI31 price projections and clamps, cloud top, the overbought trailing-stop state machine, bottom-2 RSI OB basket, SQQQ-vs-TLT selector, the ChartPrime daily channel engine, the channel-risk latch and the allocation tree.</li>
         <li>Display fixes only: the DIP (TECL) branch shows TECL / TMF / GLD / QUAL at 25% each regardless of UVXY; the cash row is labelled BOXX (the script calls it BIL/CASH).</li>
         <li>Values follow <b>1-hour chart semantics</b>, matching your TradingView 1h chart: the script reads daily values with lookahead, so the RSI projections are based on the current daily close and the state machines run on every hourly bar of the day. On a 1D chart the same script would show RSI80 ≈ ${money(S.rsi80_line_1d)} and RSI31 ≈ ${money(S.rsi31_raw_1d)} today (signal ${esc(S.alloc_1d)}).</li>
-        <li>Data basis: <b>${esc(M.basis)}</b>, fetched ${esc(M.fetched_at_et)}. ${M.intraday ? 'Intraday values can change until the 4:00 PM ET close.' : ''} The page checks the live feed every minute and updates in place, with no reload. The feed reruns this engine on fresh prices about every 10 minutes in market hours (GitHub's scheduler can run a few minutes late), so it is near-live rather than tick-by-tick.</li>
+        <li>Data basis: <b>${esc(M.basis)}</b>, fetched ${esc(M.fetched_at_et)}. ${M.intraday ? 'Intraday values can change until the 4:00 PM ET close.' : ''} The page checks the feed every minute and updates in place, with no reload. The feed reruns this engine on fresh prices once at 3:00 PM ET (2:00 PM CT), so you can check the signal before the close, and again after the 4:00 PM close. GitHub's scheduler can run late, so check the time shown above.</li>
       </ul>
       <h3>Chart drawing notes</h3>
       <ul>

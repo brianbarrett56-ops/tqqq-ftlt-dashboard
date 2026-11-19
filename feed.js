@@ -1,5 +1,5 @@
 /* Live feed client. A scheduled GitHub Action (private repo brianbarrett56-ops/tqqq-ftlt-feed) reruns the
-   unchanged Python strategy engine on Yahoo daily bars about every 10 minutes in market hours, rebuilds
+   unchanged Python strategy engine on Yahoo daily bars at 3:00 PM ET (2:00 PM CT) on weekdays, rebuilds
    the backtest once after the close, and publishes data.json / backtest.json / status.json to an
    unlisted gist. This script polls the small status.json once a minute and downloads a full file only
    when it has changed, so the page updates in place without reloading. If the feed can't be reached, the
