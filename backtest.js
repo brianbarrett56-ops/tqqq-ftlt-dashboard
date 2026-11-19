@@ -170,6 +170,7 @@
     moneyIn('btBal0', 'bal0'); moneyIn('btMonthly', 'monthly');
     markPreset();
     setupHover();
+    setupNav();
     window.addEventListener('resize', () => { if (!el('tab-bt').hidden && view) { draw(); drawYears(); if (MC.rows) renderMC(); } });
   }
   function markPreset() {
@@ -385,6 +386,7 @@
       }
     }
     g.fillStyle = T.faint; g.font = '500 10.5px Geist, system-ui'; g.textAlign = 'left'; g.fillText('HELD', P.x1 + 6, (P.st[0] + P.st[1]) / 2 + 4);
+    drawNav();
     // legend
     const items = [['Strategy', '#FF9800']].concat(['TQQQ', 'QQQ', 'SPY'].filter((k) => opt.bench[k]).map((k) => [k + ' buy & hold', BCOL[k]])).concat(opt.monthly > 0 && !isPct ? [['Total contributed', T.axis]] : []);
     el('btLegend').innerHTML = items.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('') +
@@ -404,6 +406,77 @@
 
   // Tooltip value: funded balance in $ mode, time-weighted cumulative return in % mode.
   function fmtV(bal, eq, j) { if (opt.unit !== 'pct') return money(bal[j]); return pct(eq[j] / eq[0] - 1); }
+  // ------------------------------------------------------------------ range navigator (FRED-style)
+  // Full-history strategy line (log) with a draggable window: drag the edges to resize, the middle to pan,
+  // or drag anywhere else to draw a new range. Same returns as the main chart, nothing recomputed differently.
+  const NAV = { L: 8, R: 64, drag: null, raf: 0, cache: {} };
+  function navSeries() {
+    const key = `${opt.sem}_${opt.chan}_${opt.fill}_${opt.cost}_${D.n}`;
+    if (NAV.cache.key === key) return NAV.cache;
+    const S = D.full[`${opt.sem}_${opt.chan}_${opt.fill}`], c = opt.cost / 1e4, s = new Float64Array(D.n), q = new Float64Array(D.n);
+    s[0] = 0; q[0] = 0;
+    for (let i = 1; i < D.n; i++) { s[i] = s[i - 1] + Math.log((1 + S.r[i]) * (1 - c * S.t[i])); q[i] = q[i - 1] + Math.log(1 + D.benchR.QQQ[i]); }
+    NAV.cache = { key, s, q };
+    return NAV.cache;
+  }
+  function drawNav() {
+    const cv = el('btNav'); if (!cv || !view) return;
+    const { g, w, h } = canvasCtx(cv), T = TH(), n = D.n, x0 = NAV.L, x1 = w - NAV.R, top = 4, bot = h - 16;
+    const X = (i) => x0 + (i / (n - 1)) * (x1 - x0);
+    NAV.X = X; NAV.x0 = x0; NAV.x1 = x1;
+    const { s, q } = navSeries();
+    let lo = Infinity, hi = -Infinity; for (let i = 0; i < n; i++) { lo = Math.min(lo, s[i], q[i]); hi = Math.max(hi, s[i], q[i]); }
+    const Y = (v) => bot - ((v - lo) / (hi - lo || 1)) * (bot - top);
+    ERAS.forEach((e) => { const a = idxOf(e.a), b = Math.min(n - 1, idxOf(e.b)); if (b > a) { g.fillStyle = T.eraFill[e.q]; g.fillRect(X(a), top, X(b) - X(a), bot - top); } });
+    g.strokeStyle = T.grid; g.lineWidth = 1; g.strokeRect(x0 + 0.5, top + 0.5, x1 - x0 - 1, bot - top);
+    g.fillStyle = T.axis; g.font = '10.5px Geist Mono, monospace'; g.textAlign = 'center';
+    const span = D.years[n - 1] - D.years[0], step = span > 50 ? 10 : span > 20 ? 5 : span > 8 ? 2 : 1;
+    for (let i = 1; i < n; i++) if (D.years[i] !== D.years[i - 1] && D.years[i] % step === 0) { const x = X(i); g.fillText(String(D.years[i]), x, h - 3); g.strokeStyle = T.grid; g.beginPath(); g.moveTo(x, bot); g.lineTo(x, bot + 3); g.stroke(); }
+    line(g, { a: q, c: BCOL.QQQ, w: 1 }, X, Y, n);
+    line(g, { a: s, c: '#FF9800', w: 1.3 }, X, Y, n);
+    g.setLineDash([]);
+    // selection
+    const a = X(view.i0), b = X(view.i1);
+    g.fillStyle = isLight() ? 'rgba(255,255,255,0.45)' : 'rgba(11,13,17,0.45)';
+    g.fillRect(x0, top, a - x0, bot - top); g.fillRect(b, top, x1 - b, bot - top);
+    g.fillStyle = isLight() ? 'rgba(41,98,255,0.08)' : 'rgba(41,98,255,0.12)'; g.fillRect(a, top, b - a, bot - top);
+    g.strokeStyle = '#2962FF'; g.lineWidth = 1.5; g.strokeRect(a, top + 0.75, b - a, bot - top - 1.5);
+    [a, b].forEach((x) => { g.fillStyle = '#2962FF'; g.beginPath(); g.roundRect ? g.roundRect(x - 4, (top + bot) / 2 - 11, 8, 22, 2) : g.rect(x - 4, (top + bot) / 2 - 11, 8, 22); g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 1; g.beginPath(); g.moveTo(x - 1, (top + bot) / 2 - 5); g.lineTo(x - 1, (top + bot) / 2 + 5); g.moveTo(x + 1, (top + bot) / 2 - 5); g.lineTo(x + 1, (top + bot) / 2 + 5); g.stroke(); });
+    g.textAlign = 'left'; g.fillStyle = T.faint; g.font = '500 10.5px Geist, system-ui'; g.fillText('STRATEGY', x1 + 6, top + 12); g.fillStyle = BCOL.QQQ; g.fillText('QQQ', x1 + 6, top + 26);
+    el('btNavTxt').textContent = `${D.dates[view.i0]} → ${D.dates[view.i1]} · drag the edges to resize, the middle to slide, or anywhere else to draw a new range`;
+  }
+  function setupNav() {
+    const cv = el('btNav'); if (!cv) return;
+    const idxAt = (ev) => { const r = cv.getBoundingClientRect(), x = ev.clientX - r.left; return Math.max(0, Math.min(D.n - 1, Math.round(((x - NAV.x0) / (NAV.x1 - NAV.x0)) * (D.n - 1)))); };
+    const MIN = 21;
+    const setRange = (a, b, full) => {
+      a = Math.max(0, Math.min(a, D.n - 1 - MIN)); b = Math.max(a + MIN, Math.min(b, D.n - 1));
+      opt.trail = null; opt.start = D.dates[a]; opt.end = b >= D.n - 1 ? null : D.dates[b];
+      syncSelects(); markPreset();
+      if (full) { render(); return; }
+      if (!NAV.raf) NAV.raf = requestAnimationFrame(() => { NAV.raf = 0; view = compute(); view.ddEp = ddEpisodes(view.eq); renderKpis(); draw(); });
+    };
+    cv.addEventListener('pointermove', (ev) => {
+      if (!view) return;
+      if (!NAV.drag) { const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, a = NAV.X(view.i0), b = NAV.X(view.i1); cv.style.cursor = Math.abs(x - a) < 7 || Math.abs(x - b) < 7 ? 'ew-resize' : x > a && x < b ? 'grab' : 'crosshair'; return; }
+      const d = NAV.drag, i = idxAt(ev);
+      if (d.mode === 'L') setRange(Math.min(i, d.b - MIN), d.b);
+      else if (d.mode === 'R') setRange(d.a, Math.max(i, d.a + MIN));
+      else if (d.mode === 'M') { const len = d.b - d.a; let a = d.a + (i - d.i); a = Math.max(0, Math.min(D.n - 1 - len, a)); setRange(a, a + len); }
+      else setRange(Math.min(d.i, i), Math.max(d.i, i));
+    });
+    cv.addEventListener('pointerdown', (ev) => {
+      if (!view) return;
+      const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, a = NAV.X(view.i0), b = NAV.X(view.i1);
+      const mode = Math.abs(x - a) < 7 ? 'L' : Math.abs(x - b) < 7 ? 'R' : x > a && x < b ? 'M' : 'N';
+      NAV.drag = { mode, a: view.i0, b: view.i1, i: idxAt(ev) };
+      cv.setPointerCapture(ev.pointerId); if (mode === 'M') cv.style.cursor = 'grabbing';
+    });
+    const end = () => { if (!NAV.drag) return; const moved = NAV.drag; NAV.drag = null; if (moved.mode === 'N' && view.i1 - view.i0 <= MIN) { /* click without drag: ignore */ } cv.style.cursor = 'grab'; render(); };
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    cv.addEventListener('dblclick', () => { opt.trail = null; opt.start = D.dates[0]; opt.end = null; syncSelects(); markPreset(); render(); });
+  }
   function setupHover() {
     const cv = el('btCanvas'), tip = el('btTip');
     const move = (ev) => {

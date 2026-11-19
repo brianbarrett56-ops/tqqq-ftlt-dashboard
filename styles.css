@@ -152,6 +152,10 @@ details summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:13px
 .bt-legend i.sq{width:10px;height:10px;border-radius:2px}
 .bt-cwrap{position:relative;height:560px}
 .bt-cwrap.short{height:200px}
+.bt-navhd{display:flex;gap:10px;align-items:baseline;margin:10px 0 4px 8px;font:500 11px var(--font);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.bt-navhd .muted{text-transform:none;letter-spacing:0;font:11.5px var(--mono)}
+.bt-nav{position:relative;height:80px;touch-action:none}
+.bt-nav canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab}
 .bt-cwrap canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
 .bt-cross{position:absolute;top:8px;bottom:22px;width:1px;background:rgba(255,255,255,.28);pointer-events:none}
 .bt-tip{position:absolute;z-index:4;pointer-events:none;background:rgba(11,13,17,.94);border:1px solid var(--line-2);border-radius:5px;padding:7px 9px;font:12px var(--mono);line-height:1.55;min-width:210px;max-width:300px}
