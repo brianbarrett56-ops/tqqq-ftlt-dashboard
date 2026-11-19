@@ -144,6 +144,9 @@ details summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:13px
 .bt-kpis .mix{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px;font:12px var(--mono)}
 .sw i,.bt-legend i,.bt-tip .al i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 .bt-chart,.bt-years{margin-top:12px}
+.bt-cwrap{position:relative}
+.bt-unit{position:absolute;right:6px;top:2px;z-index:4;background:var(--panel)}
+.bt-unit button{padding:2px 9px;font:600 12px var(--mono)}
 .bt-legend{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted);font-size:12px;margin:0 0 6px 4px}
 .bt-legend i{width:14px;height:3px;border-radius:1px}
 .bt-legend i.sq{width:10px;height:10px;border-radius:2px}

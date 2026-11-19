@@ -1,4 +1,4 @@
-/* Light / dark toggle shared by both tabs. Choice lasts for the page session; add ?theme=light to the URL to open in light mode. */
+/* Light / dark toggle shared by both tabs. Opens in light mode by default; the choice lasts for the page session. Add ?theme=dark to the URL to open in dark mode. */
 (function () {
   'use strict';
   const root = document.documentElement, btn = document.getElementById('themeBtn');

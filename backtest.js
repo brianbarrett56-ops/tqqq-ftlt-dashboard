@@ -38,7 +38,7 @@
   const ERA_FILL = { hyp: 'rgba(255,82,82,0.07)', syn: 'rgba(255,152,0,0.06)', real: 'rgba(76,175,80,0.05)' };
 
   let D = null, loaded = false, loading = false, needsRender = false;
-  const opt = { sem: '1H', chan: 'tv', fill: 'same', cost: 2, start: '1953-01-02', end: null, log: true, bench: { TQQQ: true, QQQ: true, SPY: false }, bal0: 10000, monthly: 0, trail: null };
+  const opt = { sem: '1H', chan: 'tv', fill: 'same', cost: 2, start: '1953-01-02', end: null, log: true, bench: { TQQQ: true, QQQ: true, SPY: false }, bal0: 10000, monthly: 0, trail: null, unit: 'usd' };
   let view = null;     // computed window for drawing / hover
 
   // ------------------------------------------------------------------ tabs
@@ -154,6 +154,10 @@
       opt.trail = +b.dataset.m; applyTrail(); syncSelects(); markPreset(); render();
     }));
     syncSelects();
+    // $ | % toggle on the chart: dollars = funded balance; % = time-weighted cumulative return (deposits excluded).
+    document.querySelectorAll('#btUnit button').forEach((b) => b.addEventListener('click', () => {
+      opt.unit = b.dataset.u; document.querySelectorAll('#btUnit button').forEach((x) => x.classList.toggle('on', x === b)); draw();
+    }));
     ['TQQQ', 'QQQ', 'SPY'].forEach((k) => {
       const cb = el('btB' + k); cb.checked = opt.bench[k];
       cb.addEventListener('change', () => { opt.bench[k] = cb.checked; render(); });
@@ -314,22 +318,28 @@
       if (X(b - v.i0) - X(a - v.i0) > 90) { g.fillStyle = T.era[e.q]; g.font = '500 11px Geist, system-ui'; g.fillText(e.name, X(a - v.i0) + 6, P.eq[0] + 14); }
     });
     // equity range
-    const series = [{ a: v.bal, c: '#FF9800', w: 2 }];
-    for (const k of ['SPY', 'QQQ', 'TQQQ']) if (opt.bench[k]) series.unshift({ a: v.bBal[k], c: BCOL[k], w: 1.2, dash: k === 'TQQQ' ? [5, 3] : null });
+    const isPct = opt.unit === 'pct';
+    // % mode plots growth multiples (1 = 0%) of the time-weighted equity, so deposits never move the lines.
+    const rel = (a) => { const o = new Float64Array(v.len), b = a[0] || 1; for (let j = 0; j < v.len; j++) o[j] = a[j] / b; return o; };
+    const series = [{ a: isPct ? rel(v.eq) : v.bal, c: '#FF9800', w: 2 }];
+    for (const k of ['SPY', 'QQQ', 'TQQQ']) if (opt.bench[k]) series.unshift({ a: isPct ? rel(v.bEq[k]) : v.bBal[k], c: BCOL[k], w: 1.2, dash: k === 'TQQQ' ? [5, 3] : null });
+    const lab = isPct ? (t) => { const r = (t - 1) * 100, a = Math.abs(r); return (r > 0.05 ? '+' : r < -0.05 ? '−' : '') + (a >= 1e4 ? Math.round(a).toLocaleString('en-US') : a >= 100 ? a.toFixed(0) : a >= 10 ? a.toFixed(0) : a.toFixed(1)) + '%'; } : money;
     let lo = Infinity, hi = -Infinity;
     series.forEach((s) => { for (let j = 0; j < v.len; j++) { const x = s.a[j]; if (x > 0) { lo = Math.min(lo, x); hi = Math.max(hi, x); } } });
-    if (!opt.log) lo = 0;
+    if (!opt.log) lo = isPct ? Math.min(1, lo) : 0;
     const tf = opt.log ? Math.log10 : (x) => x;
     const yl = tf(lo), yh = tf(hi);
-    const Y = (x) => P.eq[1] - ((tf(Math.max(x, opt.log ? lo : 0)) - yl) / (yh - yl || 1)) * (P.eq[1] - P.eq[0] - 18);
+    const Y = (x) => P.eq[1] - ((tf(Math.max(x, lo)) - yl) / (yh - yl || 1)) * (P.eq[1] - P.eq[0] - 18);
     view.Y = Y;
     // grid + labels
     g.strokeStyle = T.grid; g.lineWidth = 1; g.fillStyle = T.axis; g.font = '11px Geist Mono, monospace'; g.textAlign = 'left';
     const ticks = [];
-    if (opt.log) { for (let e = Math.floor(yl); e <= Math.ceil(yh); e++) for (const m of (yh - yl > 5 ? [1] : yh - yl > 2 ? [1, 3] : [1, 2, 5])) { const val = m * 10 ** e; if (tf(val) >= yl && tf(val) <= yh) ticks.push(val); } }
+    if (isPct && (opt.log ? yh - yl < 0.6 : true)) { const step = niceStep((hi - lo) / 5); for (let t = Math.ceil((lo - 1) / step) * step + 1; t <= hi + 1e-9; t += step) ticks.push(t); }
+    else if (opt.log) { for (let e = Math.floor(yl); e <= Math.ceil(yh); e++) for (const m of (yh - yl > 5 ? [1] : yh - yl > 2 ? [1, 3] : [1, 2, 5])) { const val = m * 10 ** e; if (tf(val) >= yl && tf(val) <= yh) ticks.push(val); } }
     else { const step = niceStep(hi / 5); for (let t = 0; t <= hi; t += step) ticks.push(t); }
     const tk = ticks.length > 9 ? ticks.filter((t, i) => i % Math.ceil(ticks.length / 9) === 0) : ticks;
-    tk.forEach((t) => { const y = Y(t); g.beginPath(); g.moveTo(P.x0, y); g.lineTo(P.x1, y); g.stroke(); g.fillText(money(t), P.x1 + 6, y + 4); });
+    tk.forEach((t) => { const y = Y(t); g.beginPath(); g.moveTo(P.x0, y); g.lineTo(P.x1, y); g.stroke(); g.fillText(lab(t), P.x1 + 6, y + 4); });
+    if (isPct && lo < 1 && hi > 1) { const y = Y(1); g.strokeStyle = T.axis; g.globalAlpha = 0.5; g.beginPath(); g.moveTo(P.x0, y); g.lineTo(P.x1, y); g.stroke(); g.globalAlpha = 1; }
     // year ticks
     const yrs = (v.i1 - v.i0) / 252, stepY = yrs > 50 ? 10 : yrs > 25 ? 5 : yrs > 10 ? 2 : 1;
     g.textAlign = 'center';
@@ -351,7 +361,7 @@
       }
     }
     // lines (decimated: min/max per pixel column)
-    if (opt.monthly > 0) line(g, { a: v.contrib, c: T.axis, w: 1, dash: [2, 3] }, X, Y, v.len);
+    if (opt.monthly > 0 && !isPct) line(g, { a: v.contrib, c: T.axis, w: 1, dash: [2, 3] }, X, Y, v.len);
     series.forEach((s) => line(g, s, X, Y, v.len));
     // drawdown panel
     let ddLo = v.mdd; series.length; const bdd = {};
@@ -376,7 +386,7 @@
     }
     g.fillStyle = T.faint; g.font = '500 10.5px Geist, system-ui'; g.textAlign = 'left'; g.fillText('HELD', P.x1 + 6, (P.st[0] + P.st[1]) / 2 + 4);
     // legend
-    const items = [['Strategy', '#FF9800']].concat(['TQQQ', 'QQQ', 'SPY'].filter((k) => opt.bench[k]).map((k) => [k + ' buy & hold', BCOL[k]])).concat(opt.monthly > 0 ? [['Total contributed', T.axis]] : []);
+    const items = [['Strategy', '#FF9800']].concat(['TQQQ', 'QQQ', 'SPY'].filter((k) => opt.bench[k]).map((k) => [k + ' buy & hold', BCOL[k]])).concat(opt.monthly > 0 && !isPct ? [['Total contributed', T.axis]] : []);
     el('btLegend').innerHTML = items.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('') +
       ORDER.filter((k) => k !== 'W' || view.time.W).map((k) => `<span><i class="sq" style="background:${ST[k].color}"></i>${ST[k].short}</span>`).join('');
   }
@@ -392,6 +402,8 @@
     g.stroke(); g.setLineDash([]);
   }
 
+  // Tooltip value: funded balance in $ mode, time-weighted cumulative return in % mode.
+  function fmtV(bal, eq, j) { if (opt.unit !== 'pct') return money(bal[j]); return pct(eq[j] / eq[0] - 1); }
   function setupHover() {
     const cv = el('btCanvas'), tip = el('btTip');
     const move = (ev) => {
@@ -402,9 +414,9 @@
       const st = view.states[Math.max(0, i - 1 - (opt.fill === 'next' ? 1 : 0))];
       const era = ERAS.find((e) => D.dates[i] >= e.a && D.dates[i] <= e.b);
       let html = `<div class="d">${D.dates[i]} <span class="q-${era.q}">${era.name}</span></div>` +
-        `<div><b style="color:#FF9800">Strategy</b> ${money(view.bal[j])} <span class="ddv">DD ${ddTxt(view.dd[j])}</span></div>`;
-      ['TQQQ', 'QQQ', 'SPY'].forEach((k) => { if (opt.bench[k]) html += `<div><b style="color:${BCOL[k]}">${k}</b> ${money(view.bBal[k][j])} <span class="ddv">DD ${ddTxt(view.bDD[k][j])}</span></div>`; });
-      if (opt.monthly > 0) html += `<div class="muted">Contributed to date ${money(view.contrib[j])} · DD is time-weighted</div>`;
+        `<div><b style="color:#FF9800">Strategy</b> ${fmtV(view.bal, view.eq, j)} <span class="ddv">DD ${ddTxt(view.dd[j])}</span></div>`;
+      ['TQQQ', 'QQQ', 'SPY'].forEach((k) => { if (opt.bench[k]) html += `<div><b style="color:${BCOL[k]}">${k}</b> ${fmtV(view.bBal[k], view.bEq[k], j)} <span class="ddv">DD ${ddTxt(view.bDD[k][j])}</span></div>`; });
+      if (opt.monthly > 0 && opt.unit !== 'pct') html += `<div class="muted">Contributed to date ${money(view.contrib[j])} · DD is time-weighted</div>`;
       const ep = (view.ddEp || []).find((e) => j >= e.pk && j <= (e.rec == null ? view.len - 1 : e.rec) && j > e.pk);
       if (ep) html += `<div class="muted">In drawdown since ${D.dates[view.i0 + ep.pk]} · ${j - ep.pk} trading days · episode low ${pct(ep.depth)} on ${D.dates[view.i0 + ep.tr]}${ep.rec == null ? ' · not yet recovered' : ' · recovered ' + D.dates[view.i0 + ep.rec]}</div>`;
       html += `<div class="al"><i style="background:${ST[stKey(st)].color}"></i>Holding: ${esc(stateLabel(st))}<br><span class="muted">${esc(weightsText(st))}</span></div>`;
