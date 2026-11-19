@@ -38,7 +38,7 @@
   const ERA_FILL = { hyp: 'rgba(255,82,82,0.07)', syn: 'rgba(255,152,0,0.06)', real: 'rgba(76,175,80,0.05)' };
 
   let D = null, loaded = false, loading = false, needsRender = false;
-  const opt = { sem: '1H', chan: 'tv', fill: 'same', cost: 2, start: '1953-01-02', end: null, log: true, bench: { TQQQ: true, QQQ: true, SPY: false }, bal0: 10000, monthly: 0 };
+  const opt = { sem: '1H', chan: 'tv', fill: 'same', cost: 2, start: '1953-01-02', end: null, log: true, bench: { TQQQ: true, QQQ: true, SPY: false }, bal0: 10000, monthly: 0, trail: null };
   let view = null;     // computed window for drawing / hover
 
   // ------------------------------------------------------------------ tabs
@@ -69,6 +69,7 @@
   window.FTLTFeed.onBacktest((j) => {
     if (!loaded) return;
     D = prep(j); MC.cache = {}; btStatusText();
+    if (opt.trail) { applyTrail(); syncSelects(); }
     if (!el('tab-bt').hidden) render(); else needsRender = true;
   });
   function btStatusText() {
@@ -132,12 +133,27 @@
     const ys = []; for (let y = firstY; y <= lastY; y++) ys.push(y);
     el('btStartY').innerHTML = ys.map((y) => `<option value="${y}">${y}</option>`).join('');
     el('btEndY').innerHTML = ys.map((y) => `<option value="${y}">${y}</option>`).join('');
-    el('btStartY').value = firstY; el('btEndY').value = lastY;
-    el('btStartY').addEventListener('change', () => { opt.start = el('btStartY').value + '-01-01'; markPreset(); render(); });
-    el('btEndY').addEventListener('change', () => { const y = el('btEndY').value; opt.end = +y === lastY ? null : y + '-12-31'; render(); });
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    ['btStartM', 'btEndM'].forEach((id) => { el(id).innerHTML = MON.map((m, i) => `<option value="${String(i + 1).padStart(2, '0')}">${m}</option>`).join(''); });
+    // From/To month + year: start = first day of the start month, end = last day of the end month.
+    const fromSelects = () => {
+      opt.trail = null;
+      let s = `${el('btStartY').value}-${el('btStartM').value}-01`;
+      const ey = +el('btEndY').value, em = +el('btEndM').value;
+      let e = new Date(Date.UTC(ey, em, 0)).toISOString().slice(0, 10);
+      if (s < D.dates[0]) s = D.dates[0];
+      if (e <= s) { e = new Date(Date.UTC(+s.slice(0, 4), +s.slice(5, 7), 0)).toISOString().slice(0, 10); }
+      opt.start = s; opt.end = e >= D.dates[D.n - 1] ? null : e;
+      syncSelects(); markPreset(); render();
+    };
+    ['btStartM', 'btStartY', 'btEndM', 'btEndY'].forEach((id) => el(id).addEventListener('change', fromSelects));
     document.querySelectorAll('#btPresets button').forEach((b) => b.addEventListener('click', () => {
-      opt.start = b.dataset.start; opt.end = null; el('btStartY').value = b.dataset.start.slice(0, 4); el('btEndY').value = lastY; markPreset(); render();
+      opt.trail = null; opt.start = b.dataset.start; opt.end = null; syncSelects(); markPreset(); render();
     }));
+    document.querySelectorAll('#btTrail button').forEach((b) => b.addEventListener('click', () => {
+      opt.trail = +b.dataset.m; applyTrail(); syncSelects(); markPreset(); render();
+    }));
+    syncSelects();
     ['TQQQ', 'QQQ', 'SPY'].forEach((k) => {
       const cb = el('btB' + k); cb.checked = opt.bench[k];
       cb.addEventListener('change', () => { opt.bench[k] = cb.checked; render(); });
@@ -152,7 +168,27 @@
     setupHover();
     window.addEventListener('resize', () => { if (!el('tab-bt').hidden && view) { draw(); drawYears(); if (MC.rows) renderMC(); } });
   }
-  function markPreset() { document.querySelectorAll('#btPresets button').forEach((b) => b.classList.toggle('on', b.dataset.start.slice(0, 4) === opt.start.slice(0, 4))); }
+  function markPreset() {
+    document.querySelectorAll('#btPresets button').forEach((b) => b.classList.toggle('on', !opt.trail && !opt.end && b.dataset.start === opt.start));
+    document.querySelectorAll('#btTrail button').forEach((b) => b.classList.toggle('on', opt.trail === +b.dataset.m));
+  }
+  // Trailing N months ending at the latest close (recomputed when the daily rebuild adds a day).
+  function applyTrail() {
+    const last = D.dates[D.n - 1];
+    const d = new Date(last + 'T00:00:00Z'); const day = d.getUTCDate();
+    d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - opt.trail);
+    const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, dim));
+    // Start at the last close on or before the anniversary, so returns run close-to-close over N months.
+    const s = d.toISOString().slice(0, 10);
+    const k = Math.max(0, idxOf(s) - (D.dates[idxOf(s)] > s ? 1 : 0));
+    opt.start = D.dates[k]; opt.end = null;
+  }
+  function syncSelects() {
+    const s = opt.start < D.dates[0] ? D.dates[0] : opt.start, e = opt.end || D.dates[D.n - 1];
+    el('btStartY').value = s.slice(0, 4); el('btStartM').value = s.slice(5, 7);
+    el('btEndY').value = e.slice(0, 4); el('btEndM').value = e.slice(5, 7);
+  }
 
   // ------------------------------------------------------------------ compute
   function compute() {
@@ -234,7 +270,9 @@
     const tot = Object.values(v.time).reduce((a, b) => a + b, 0) || 1;
     const top = ORDER.filter((k) => v.time[k]).map((k) => `<span class="sw"><i style="background:${ST[k].color}"></i>${ST[k].short} ${v.time[k] / tot < 0.005 ? '<1' : (100 * v.time[k] / tot).toFixed(0)}%</span>`).join('');
     el('btKpis').innerHTML =
-      card('CAGR', pct(v.cagr), `TQQQ buy-and-hold ${pct(T.cagr)}`) +
+      (v.yrs < 0.99
+        ? card('Total return', pct(v.eq[v.len - 1] / v.eq[0] - 1), `Under 1 year, not annualized · TQQQ B&amp;H ${pct(v.bEq.TQQQ[v.len - 1] / v.bEq.TQQQ[0] - 1)}`)
+        : card('CAGR', pct(v.cagr), `TQQQ buy-and-hold ${pct(T.cagr)}`)) +
       card('Max drawdown', pct(v.mdd), `${D.dates[v.ddPk]} → ${D.dates[v.ddTr]} · TQQQ B&amp;H ${pct(T.mdd)}`, 'hot') +
       card('Ending balance', money(v.bal[v.len - 1]), `${money(v.contrib[v.len - 1])} contributed · TQQQ B&amp;H ${money(v.bBal.TQQQ[v.len - 1])} · ${v.yrs.toFixed(1)} yrs`) +
       card('Volatility · Sharpe', `${pctU(v.vol, 0)} · ${v.sharpe == null ? '—' : v.sharpe.toFixed(2)}`, 'Annualized; Sharpe vs T-bills') +
@@ -295,7 +333,17 @@
     // year ticks
     const yrs = (v.i1 - v.i0) / 252, stepY = yrs > 50 ? 10 : yrs > 25 ? 5 : yrs > 10 ? 2 : 1;
     g.textAlign = 'center';
-    for (let j = 1; j < v.len; j++) {
+    if (yrs < 3) {   // short windows: month ticks
+      const stepM = yrs < 0.8 ? 1 : yrs < 1.6 ? 2 : 3, MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      for (let j = 1; j < v.len; j++) {
+        const i = v.i0 + j, m = +D.dates[i].slice(5, 7);
+        if (D.dates[i].slice(5, 7) !== D.dates[i - 1].slice(5, 7) && (m - 1) % stepM === 0) {
+          const x = X(j); g.strokeStyle = T.grid; g.beginPath(); g.moveTo(x, P.eq[0]); g.lineTo(x, P.st[1]); g.stroke();
+          g.fillStyle = T.axis; g.fillText(m === 1 ? String(D.years[i]) : `${MN[m - 1]} '${D.dates[i].slice(2, 4)}`, x, P.st[1] + 14);
+        }
+      }
+    }
+    for (let j = 1; j < v.len && yrs >= 3; j++) {
       const i = v.i0 + j;
       if (D.years[i] !== D.years[i - 1] && D.years[i] % stepY === 0) {
         const x = X(j); g.strokeStyle = T.grid; g.beginPath(); g.moveTo(x, P.eq[0]); g.lineTo(x, P.st[1]); g.stroke();

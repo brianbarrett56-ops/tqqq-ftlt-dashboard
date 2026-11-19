@@ -110,11 +110,19 @@
       <div class="bt-status" id="btStatus"></div>
     </div>
     <section class="panel bt-controls" aria-label="Backtest options">
-      <div class="ctl"><span class="cl">Start</span>
+      <div class="ctl"><span class="cl">Since</span>
         <div class="seg" id="btPresets">
           <button data-start="1953-01-02">1953</button><button data-start="1971-02-05">1971</button><button data-start="1985-10-01">1985</button><button data-start="2000-01-01">2000</button><button data-start="2010-02-11" title="Real TQQQ era">2010 · real</button>
         </div>
-        <select id="btStartY" aria-label="Start year"></select><span class="muted">to</span><select id="btEndY" aria-label="End year"></select>
+        <span class="cl">Trailing</span>
+        <div class="seg" id="btTrail">
+          <button data-m="3">3M</button><button data-m="6">6M</button><button data-m="12">1Y</button><button data-m="36">3Y</button><button data-m="60">5Y</button><button data-m="120">10Y</button>
+        </div>
+      </div>
+      <div class="ctl"><span class="cl">From</span>
+        <select id="btStartM" aria-label="Start month"></select><select id="btStartY" aria-label="Start year"></select>
+        <span class="muted">to</span>
+        <select id="btEndM" aria-label="End month"></select><select id="btEndY" aria-label="End year"></select>
       </div>
       <div class="ctl"><span class="cl">Chart</span><div class="seg" id="btSem"></div></div>
       <div class="ctl"><span class="cl">Channels</span><div class="seg" id="btChan"></div></div>
